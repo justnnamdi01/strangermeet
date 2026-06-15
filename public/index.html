@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StrangerMeet – Meet Random People</title>
+  <!-- Socket.io client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --bg: #0d0d0f;
+      --surface: #18181c;
+      --surface2: #222228;
+      --border: #2e2e38;
+      --accent: #7c3aed;
+      --accent2: #a855f7;
+      --accent-glow: rgba(124,58,237,0.35);
+      --text: #f0f0f5;
+      --muted: #8888a0;
+      --danger: #ef4444;
+      --success: #22c55e;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ─── LANDING ─── */
+    #landing {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.18) 0%, transparent 65%);
+    }
+    .logo-wrap { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+    .logo-icon {
+      width:52px; height:52px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius:16px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:26px;
+      box-shadow: 0 0 24px var(--accent-glow);
+    }
+    .logo-text {
+      font-size:32px; font-weight:800; letter-spacing:-0.5px;
+      background: linear-gradient(90deg,#fff 40%,var(--accent2));
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    }
+    .tagline { font-size:17px; color:var(--muted); margin-bottom:44px; }
+    .start-btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color:#fff; border:none;
+      padding:18px 56px; border-radius:50px;
+      font-size:18px; font-weight:700; cursor:pointer;
+      box-shadow: 0 0 32px var(--accent-glow);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .start-btn:hover { transform:translateY(-2px) scale(1.03); }
+    .features { display:flex; gap:24px; margin-top:52px; }
+    .feature { display:flex; flex-direction:column; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
+    .feature-icon {
+      width:44px; height:44px; background:var(--surface);
+      border:1px solid var(--border); border-radius:12px;
+      display:flex; align-items:center; justify-content:center; font-size:20px;
+    }
+    .disclaimer { margin-top:40px; font-size:12px; color:var(--muted); opacity:0.6; }
+
+    /* ─── PERMISSION ─── */
+    #permission-screen {
+      display:none; flex-direction:column; align-items:center;
+      justify-content:center; height:100vh; gap:20px;
+      text-align:center; padding:24px;
+    }
+    .perm-icon { font-size:56px; animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
+    #permission-screen h2 { font-size:24px; font-weight:700; }
+    #permission-screen p { color:var(--muted); max-width:360px; line-height:1.6; }
+    .allow-btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color:#fff; border:none; padding:14px 40px; border-radius:50px;
+      font-size:16px; font-weight:600; cursor:pointer;
+      box-shadow:0 0 24px var(--accent-glow); transition:transform 0.15s;
+    }
+    .allow-btn:hover { transform:scale(1.04); }
+    .skip-perm {
+      background:none; border:1px solid var(--border); color:var(--muted);
+      padding:10px 28px; border-radius:50px; font-size:14px; cursor:pointer;
+    }
+
+    /* ─── CHAT ROOM ─── */
+    #chat-room { display:none; height:100vh; flex-direction:row; }
+
+    .video-area {
+      flex:1; display:flex; flex-direction:column;
+      background:#080809; position:relative; overflow:hidden;
+    }
+    .stranger-video-wrap { flex:1; position:relative; background:#0a0a0d; overflow:hidden; }
+    #stranger-video { width:100%; height:100%; object-fit:cover; display:block; }
+    .stranger-placeholder {
+      position:absolute; inset:0;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;
+    }
+    .stranger-avatar {
+      width:96px; height:96px; border-radius:50%;
+      background:linear-gradient(135deg,#2e2e38,#3a3a48);
+      display:flex; align-items:center; justify-content:center;
+      font-size:44px; border:3px solid var(--border);
+    }
+    .stranger-name { font-size:18px; font-weight:600; }
+    .stranger-status { font-size:13px; color:var(--success); display:flex; align-items:center; gap:6px; }
+    .status-dot { width:8px; height:8px; border-radius:50%; background:var(--success); animation:blink 1.5s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* Overlays */
+    .overlay {
+      position:absolute; inset:0; z-index:10;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:20px; background:rgba(8,8,9,0.92); text-align:center; padding:24px;
+    }
+    .overlay.hidden { display:none; }
+    .spinner {
+      width:56px; height:56px;
+      border:3px solid var(--border); border-top-color:var(--accent2);
+      border-radius:50%; animation:spin 0.8s linear infinite;
+    }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .overlay h3 { font-size:22px; font-weight:700; }
+    .overlay p { color:var(--muted); font-size:15px; }
+    #user-count { font-size:13px; color:var(--accent2); font-weight:600; }
+
+    /* Your PiP */
+    .your-video-wrap {
+      position:absolute; bottom:100px; right:16px;
+      width:160px; height:120px; border-radius:12px; overflow:hidden;
+      border:2px solid var(--border); box-shadow:0 8px 24px rgba(0,0,0,0.5);
+      background:#111115; z-index:5;
+    }
+    #my-video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+    .your-label {
+      position:absolute; bottom:6px; left:8px;
+      font-size:11px; color:rgba(255,255,255,0.7);
+      background:rgba(0,0,0,0.5); padding:2px 6px; border-radius:4px;
+    }
+    .no-cam {
+      width:100%; height:100%; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:6px;
+      color:var(--muted); font-size:11px;
+    }
+    .no-cam span:first-child { font-size:28px; }
+
+    /* Controls */
+    .controls {
+      position:absolute; bottom:0; left:0; right:0; height:80px;
+      background:linear-gradient(to top,rgba(8,8,9,0.95),transparent);
+      display:flex; align-items:center; justify-content:center; gap:16px;
+      padding:0 20px; z-index:6;
+    }
+    .ctrl-btn {
+      display:flex; flex-direction:column; align-items:center; gap:4px;
+      background:var(--surface); border:1px solid var(--border); border-radius:14px;
+      padding:10px 20px; color:var(--text); cursor:pointer;
+      transition:all 0.15s; font-size:12px; min-width:72px;
+    }
+    .ctrl-btn:hover { background:var(--surface2); border-color:var(--accent); }
+    .ctrl-btn .icon { font-size:20px; }
+    .ctrl-btn.danger { border-color:var(--danger); color:var(--danger); }
+    .ctrl-btn.danger:hover { background:rgba(239,68,68,0.12); }
+    .ctrl-btn.primary {
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      border:none; color:#fff; box-shadow:0 0 16px var(--accent-glow);
+    }
+    .ctrl-btn.primary:hover { transform:scale(1.04); }
+    .ctrl-btn.muted-btn { border-color:var(--danger); }
+
+    /* ─── CHAT SIDEBAR ─── */
+    .chat-sidebar {
+      width:340px; background:var(--surface);
+      border-left:1px solid var(--border);
+      display:flex; flex-direction:column; overflow:hidden;
+    }
+    .sidebar-header {
+      padding:16px 20px; border-bottom:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .sidebar-title { font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px; }
+    .online-badge {
+      font-size:11px; background:rgba(34,197,94,0.15);
+      color:var(--success); padding:2px 8px; border-radius:20px; font-weight:600;
+    }
+    .next-btn-sm {
+      background:none; border:1px solid var(--accent); color:var(--accent2);
+      padding:6px 14px; border-radius:20px; font-size:12px; cursor:pointer;
+    }
+    .next-btn-sm:hover { background:rgba(124,58,237,0.12); }
+
+    #messages {
+      flex:1; overflow-y:auto; padding:16px;
+      display:flex; flex-direction:column; gap:10px; scroll-behavior:smooth;
+    }
+    #messages::-webkit-scrollbar { width:4px; }
+    #messages::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+
+    .msg { display:flex; flex-direction:column; gap:2px; max-width:88%; }
+    .msg.you { align-self:flex-end; align-items:flex-end; }
+    .msg.stranger { align-self:flex-start; align-items:flex-start; }
+    .msg.system { align-self:center; max-width:100%; }
+    .msg-label { font-size:11px; color:var(--muted); }
+    .msg-bubble {
+      padding:10px 14px; border-radius:16px;
+      font-size:14px; line-height:1.5; word-break:break-word;
+    }
+    .msg.you .msg-bubble { background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
+    .msg.stranger .msg-bubble { background:var(--surface2); color:var(--text); border-bottom-left-radius:4px; }
+    .msg.system .msg-bubble {
+      background:transparent; color:var(--muted); font-size:12px;
+      border:1px dashed var(--border); border-radius:8px; text-align:center; padding:6px 12px;
+    }
+    .msg-time { font-size:10px; color:var(--muted); }
+
+    .typing-indicator {
+      display:none; align-items:center; gap:6px;
+      padding:4px 16px; font-size:12px; color:var(--muted);
+    }
+    .typing-dots { display:flex; gap:3px; }
+    .typing-dots span {
+      width:5px; height:5px; border-radius:50%; background:var(--muted);
+      animation:bounce 1.2s infinite;
+    }
+    .typing-dots span:nth-child(2) { animation-delay:0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay:0.4s; }
+    @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+
+    .chat-input-area {
+      border-top:1px solid var(--border); padding:14px 16px;
+      display:flex; gap:10px; align-items:flex-end;
+    }
+    #chat-input {
+      flex:1; background:var(--surface2); border:1px solid var(--border);
+      border-radius:12px; padding:10px 14px; color:var(--text);
+      font-size:14px; resize:none; outline:none;
+      max-height:120px; min-height:40px; font-family:inherit;
+      transition:border-color 0.15s;
+    }
+    #chat-input::placeholder { color:var(--muted); }
+    #chat-input:focus { border-color:var(--accent); }
+    #chat-input:disabled { opacity:0.5; }
+    .send-btn {
+      width:40px; height:40px; border-radius:10px;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      border:none; color:#fff; font-size:18px; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      transition:transform 0.15s, opacity 0.15s;
+    }
+    .send-btn:hover { transform:scale(1.08); }
+    .send-btn:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
+
+    /* Next overlay */
+    .next-overlay-btns { display:flex; flex-direction:column; gap:12px; align-items:center; }
+    .next-btn-big {
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      color:#fff; border:none; padding:14px 44px; border-radius:50px;
+      font-size:16px; font-weight:700; cursor:pointer;
+      box-shadow:0 0 24px var(--accent-glow); transition:transform 0.15s;
+    }
+    .next-btn-big:hover { transform:scale(1.04); }
+    .home-btn {
+      background:none; border:1px solid var(--border); color:var(--muted);
+      padding:10px 28px; border-radius:50px; font-size:14px; cursor:pointer;
+    }
+    .home-btn:hover { border-color:var(--muted); color:var(--text); }
+
+    @media (max-width:700px) {
+      #chat-room { flex-direction:column; }
+      .chat-sidebar { width:100%; height:260px; border-left:none; border-top:1px solid var(--border); }
+      .your-video-wrap { width:100px; height:75px; bottom:70px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ LANDING ═══ -->
+<div id="landing">
+  <div class="logo-wrap">
+    <div class="logo-icon">👥</div>
+    <div class="logo-text">StrangerMeet</div>
+  </div>
+  <p class="tagline">Meet random people from around the world — instantly.</p>
+  <button class="start-btn" onclick="goToPermission()">Start Chatting</button>
+  <div class="features">
+    <div class="feature"><div class="feature-icon">🎥</div><span>Video Chat</span></div>
+    <div class="feature"><div class="feature-icon">💬</div><span>Text Chat</span></div>
+    <div class="feature"><div class="feature-icon">⚡</div><span>Instant Match</span></div>
+    <div class="feature"><div class="feature-icon">🌍</div><span>Worldwide</span></div>
+  </div>
+  <p class="disclaimer">By using StrangerMeet you agree to our Terms of Service. Must be 18+.</p>
+</div>
+
+<!-- ═══ PERMISSION ═══ -->
+<div id="permission-screen">
+  <div class="perm-icon">📷</div>
+  <h2>Allow Camera & Microphone</h2>
+  <p>StrangerMeet needs your camera and microphone to connect you with strangers in a live video chat.</p>
+  <button class="allow-btn" onclick="requestCamera()">Allow Access</button>
+  <button class="skip-perm" onclick="startChat(false)">Continue without camera</button>
+</div>
+
+<!-- ═══ CHAT ROOM ═══ -->
+<div id="chat-room">
+
+  <div class="video-area">
+
+    <!-- Stranger video -->
+    <div class="stranger-video-wrap">
+      <video id="stranger-video" autoplay playsinline></video>
+
+      <!-- Placeholder shown when stranger has no cam or is text-only -->
+      <div class="stranger-placeholder" id="stranger-placeholder" style="display:none">
+        <div class="stranger-avatar">🧑</div>
+        <div class="stranger-name">Stranger</div>
+        <div class="stranger-status"><div class="status-dot"></div><span>Connected</span></div>
+      </div>
+
+      <!-- Searching overlay -->
+      <div class="overlay" id="searching-overlay">
+        <div class="spinner"></div>
+        <div style="font-size:18px;font-weight:600">Finding a stranger...</div>
+        <div style="font-size:14px;color:var(--muted)">Connecting you to someone new</div>
+        <div id="user-count">🌐 Connecting to server...</div>
+      </div>
+
+      <!-- Disconnected overlay -->
+      <div class="overlay hidden" id="disconnected-overlay">
+        <h3>Stranger disconnected</h3>
+        <p>They left the chat. Find someone new?</p>
+        <div class="next-overlay-btns">
+          <button class="next-btn-big" onclick="findNext()">Next Stranger</button>
+          <button class="home-btn" onclick="goHome()">Go Home</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Your PiP -->
+    <div class="your-video-wrap">
+      <video id="my-video" autoplay playsinline muted></video>
+      <div class="no-cam" id="no-cam-placeholder"><span>🙈</span><span>No cam</span></div>
+      <div class="your-label">You</div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button class="ctrl-btn" id="mic-btn" onclick="toggleMic()">
+        <span class="icon">🎙️</span><span>Mic</span>
+      </button>
+      <button class="ctrl-btn" id="cam-btn" onclick="toggleCam()">
+        <span class="icon">📷</span><span>Camera</span>
+      </button>
+      <button class="ctrl-btn primary" onclick="findNext()">
+        <span class="icon">⏭️</span><span>Next</span>
+      </button>
+      <button class="ctrl-btn danger" onclick="endAndGoHome()">
+        <span class="icon">✕</span><span>Stop</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- CHAT SIDEBAR -->
+  <div class="chat-sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">
+        💬 Chat
+        <span class="online-badge" id="online-badge">Searching...</span>
+      </div>
+      <button class="next-btn-sm" onclick="findNext()">Next →</button>
+    </div>
+    <div id="messages"></div>
+    <div class="typing-indicator" id="typing-indicator">
+      <div class="typing-dots"><span></span><span></span><span></span></div>
+      <span>Stranger is typing...</span>
+    </div>
+    <div class="chat-input-area">
+      <textarea id="chat-input" placeholder="Type a message..." rows="1"
+        onkeydown="handleKey(event)" oninput="autoResize(this)" disabled></textarea>
+      <button class="send-btn" id="send-btn" onclick="sendMsg()" disabled>➤</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+//  CONFIG – change SERVER_URL when deployed
+// ══════════════════════════════════════
+const SERVER_URL = window.location.origin; // same server in production
+
+// ══════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════
+let socket        = null;
+let myStream      = null;
+let peerConn      = null;
+let micOn         = true;
+let camOn         = true;
+let isConnected   = false;
+let myRole        = null; // 'caller' | 'callee'
+let typingTimer   = null;
+
+// STUN servers (Google's free public servers + placeholder for TURN)
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    // Add TURN server here for production (Twilio / Coturn):
+    // {
+    //   urls: 'turn:your-turn-server.com:3478',
+    //   username: 'YOUR_USERNAME',
+    //   credential: 'YOUR_PASSWORD',
+    // }
+  ],
+};
+
+// ══════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════
+function show(id) {
+  ['landing','permission-screen','chat-room'].forEach(s => {
+    document.getElementById(s).style.display = 'none';
+  });
+  document.getElementById(id).style.display = id === 'chat-room' ? 'flex' : 'flex';
+}
+
+function goToPermission() { show('permission-screen'); }
+
+async function requestCamera() {
+  try {
+    myStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+    const v = document.getElementById('my-video');
+    v.srcObject = myStream;
+    v.style.display = 'block';
+    document.getElementById('no-cam-placeholder').style.display = 'none';
+    startChat(true);
+  } catch(e) {
+    alert('Camera/mic not available. Starting without video.');
+    startChat(false);
+  }
+}
+
+function startChat(withCam) {
+  if (!withCam) {
+    document.getElementById('my-video').style.display = 'none';
+    document.getElementById('no-cam-placeholder').style.display = 'flex';
+  }
+  show('chat-room');
+  connectSocket();
+}
+
+function goHome() {
+  cleanupPeer();
+  stopMedia();
+  if (socket) { socket.disconnect(); socket = null; }
+  show('landing');
+}
+
+function endAndGoHome() { goHome(); }
+
+// ══════════════════════════════════════
+//  SOCKET CONNECTION
+// ══════════════════════════════════════
+function connectSocket() {
+  socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
+
+  socket.on('connect', () => {
+    addSystemMsg('✅ Connected to server. Finding a stranger...');
+    socket.emit('find_stranger');
+  });
+
+  socket.on('connect_error', () => {
+    addSystemMsg('⚠️ Cannot connect to server. Make sure the backend is running.');
+  });
+
+  socket.on('online_count', (count) => {
+    document.getElementById('user-count').textContent =
+      `🌐 ${count.toLocaleString()} people online`;
+  });
+
+  socket.on('searching', () => {
+    setSearchingState();
+  });
+
+  // Server paired us with someone
+  socket.on('matched', async ({ role }) => {
+    myRole = role;
+    setConnectedState();
+    await setupPeerConnection();
+    if (role === 'caller') {
+      // Create and send offer
+      const offer = await peerConn.createOffer();
+      await peerConn.setLocalDescription(offer);
+      socket.emit('offer', { offer });
+    }
+  });
+
+  // Signaling relay
+  socket.on('offer', async ({ offer }) => {
+    if (!peerConn) await setupPeerConnection();
+    await peerConn.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await peerConn.createAnswer();
+    await peerConn.setLocalDescription(answer);
+    socket.emit('answer', { answer });
+  });
+
+  socket.on('answer', async ({ answer }) => {
+    if (peerConn) await peerConn.setRemoteDescription(new RTCSessionDescription(answer));
+  });
+
+  socket.on('ice_candidate', async ({ candidate }) => {
+    if (peerConn && candidate) {
+      try { await peerConn.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
+    }
+  });
+
+  // Chat message from stranger
+  socket.on('chat_message', ({ text }) => {
+    hideTyping();
+    addMsg('stranger', text);
+  });
+
+  socket.on('partner_left', () => {
+    isConnected = false;
+    cleanupPeer();
+    addSystemMsg('❌ Stranger disconnected.');
+    setDisconnectedState();
+  });
+}
+
+// ══════════════════════════════════════
+//  WEBRTC
+// ══════════════════════════════════════
+async function setupPeerConnection() {
+  cleanupPeer();
+  peerConn = new RTCPeerConnection(ICE_SERVERS);
+
+  // Add our stream tracks
+  if (myStream) {
+    myStream.getTracks().forEach(track => peerConn.addTrack(track, myStream));
+  }
+
+  // Receive stranger's stream
+  peerConn.ontrack = (event) => {
+    const strangerVideo = document.getElementById('stranger-video');
+    strangerVideo.srcObject = event.streams[0];
+    document.getElementById('stranger-placeholder').style.display = 'none';
+  };
+
+  // Send ICE candidates to partner via server
+  peerConn.onicecandidate = (event) => {
+    if (event.candidate && socket) {
+      socket.emit('ice_candidate', { candidate: event.candidate });
+    }
+  };
+
+  peerConn.onconnectionstatechange = () => {
+    if (!peerConn) return;
+    const state = peerConn.connectionState;
+    if (state === 'failed' || state === 'disconnected') {
+      addSystemMsg('⚠️ Connection dropped. Searching for new stranger...');
+      findNext();
+    }
+  };
+}
+
+function cleanupPeer() {
+  if (peerConn) {
+    peerConn.close();
+    peerConn = null;
+  }
+  const v = document.getElementById('stranger-video');
+  v.srcObject = null;
+  document.getElementById('stranger-placeholder').style.display = 'none';
+}
+
+// ══════════════════════════════════════
+//  FIND NEXT / DISCONNECT
+// ══════════════════════════════════════
+function findNext() {
+  cleanupPeer();
+  isConnected = false;
+  clearMessages();
+  document.getElementById('disconnected-overlay').classList.add('hidden');
+  disableChatInput();
+  if (socket) socket.emit('next_stranger');
+  setSearchingState();
+}
+
+// ══════════════════════════════════════
+//  UI STATE SETTERS
+// ══════════════════════════════════════
+function setSearchingState() {
+  document.getElementById('searching-overlay').classList.remove('hidden');
+  document.getElementById('disconnected-overlay').classList.add('hidden');
+  setOnlineBadge('Searching...', '#f59e0b', 'rgba(245,158,11,0.15)');
+  disableChatInput();
+}
+
+function setConnectedState() {
+  isConnected = true;
+  document.getElementById('searching-overlay').classList.add('hidden');
+  document.getElementById('disconnected-overlay').classList.add('hidden');
+  document.getElementById('stranger-placeholder').style.display = 'flex';
+  setOnlineBadge('Connected', 'var(--success)', 'rgba(34,197,94,0.15)');
+  enableChatInput();
+  addSystemMsg('✅ You\'re now chatting with a stranger!');
+}
+
+function setDisconnectedState() {
+  document.getElementById('disconnected-overlay').classList.remove('hidden');
+  setOnlineBadge('Disconnected', 'var(--danger)', 'rgba(239,68,68,0.15)');
+  disableChatInput();
+}
+
+function setOnlineBadge(text, color, bg) {
+  const b = document.getElementById('online-badge');
+  b.textContent = text;
+  b.style.color = color;
+  b.style.background = bg;
+}
+
+function enableChatInput() {
+  document.getElementById('chat-input').disabled = false;
+  document.getElementById('send-btn').disabled = false;
+}
+
+function disableChatInput() {
+  document.getElementById('chat-input').disabled = true;
+  document.getElementById('send-btn').disabled = true;
+}
+
+// ══════════════════════════════════════
+//  CHAT
+// ══════════════════════════════════════
+function clearMessages() { document.getElementById('messages').innerHTML = ''; }
+
+function addSystemMsg(text) {
+  const d = document.createElement('div');
+  d.className = 'msg system';
+  d.innerHTML = `<div class="msg-bubble">${esc(text)}</div>`;
+  appendMsg(d);
+}
+
+function addMsg(who, text) {
+  const time = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  const d = document.createElement('div');
+  d.className = `msg ${who}`;
+  d.innerHTML = `
+    <div class="msg-label">${who === 'you' ? 'You' : 'Stranger'}</div>
+    <div class="msg-bubble">${esc(text)}</div>
+    <div class="msg-time">${time}</div>
+  `;
+  appendMsg(d);
+}
+
+function appendMsg(el) {
+  const m = document.getElementById('messages');
+  m.appendChild(el);
+  m.scrollTop = m.scrollHeight;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function sendMsg() {
+  const input = document.getElementById('chat-input');
+  const text  = input.value.trim();
+  if (!text || !isConnected || !socket) return;
+  addMsg('you', text);
+  socket.emit('chat_message', { text });
+  input.value = '';
+  input.style.height = 'auto';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+  // Typing indicator (optional: emit to partner)
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function showTyping() { document.getElementById('typing-indicator').style.display = 'flex'; }
+function hideTyping() { document.getElementById('typing-indicator').style.display = 'none'; }
+
+// ══════════════════════════════════════
+//  MEDIA CONTROLS
+// ══════════════════════════════════════
+function toggleMic() {
+  if (!myStream) return;
+  micOn = !micOn;
+  myStream.getAudioTracks().forEach(t => t.enabled = micOn);
+  const btn = document.getElementById('mic-btn');
+  btn.querySelector('.icon').textContent = micOn ? '🎙️' : '🔇';
+  btn.querySelector('span:last-child').textContent = micOn ? 'Mic' : 'Muted';
+  btn.style.borderColor = micOn ? '' : 'var(--danger)';
+}
+
+function toggleCam() {
+  if (!myStream) return;
+  camOn = !camOn;
+  myStream.getVideoTracks().forEach(t => t.enabled = camOn);
+  document.getElementById('my-video').style.opacity = camOn ? '1' : '0';
+  const btn = document.getElementById('cam-btn');
+  btn.querySelector('.icon').textContent = camOn ? '📷' : '🚫';
+  btn.querySelector('span:last-child').textContent = camOn ? 'Camera' : 'Off';
+  btn.style.borderColor = camOn ? '' : 'var(--danger)';
+}
+
+function stopMedia() {
+  if (myStream) { myStream.getTracks().forEach(t => t.stop()); myStream = null; }
+}
+</script>
+</body>
+</html>
