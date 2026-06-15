@@ -441,6 +441,7 @@ async function requestCamera() {
     myStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
     const v = document.getElementById('my-video');
     v.srcObject = myStream;
+    v.play().catch(() => {});
     v.style.display = 'block';
     document.getElementById('no-cam-placeholder').style.display = 'none';
     startChat(true);
@@ -551,9 +552,16 @@ async function setupPeerConnection() {
   }
 
   // Receive stranger's stream
+  // iOS Safari fix: use a MediaStream built from tracks because event.streams[0]
+  // can be empty on iOS, and srcObject must be set before calling .play()
+  const remoteStream = new MediaStream();
   peerConn.ontrack = (event) => {
+    remoteStream.addTrack(event.track);
     const strangerVideo = document.getElementById('stranger-video');
-    strangerVideo.srcObject = event.streams[0];
+    if (strangerVideo.srcObject !== remoteStream) {
+      strangerVideo.srcObject = remoteStream;
+    }
+    strangerVideo.play().catch(() => {});
     document.getElementById('stranger-placeholder').style.display = 'none';
   };
 
