@@ -40,6 +40,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ─── State ───────────────────────────────────────────────────────────
 const waitingQueue = [];   // socket IDs waiting for a match
 const activePairs  = {};   // socketId → partnerSocketId
+const userProfiles = {};   // socketId → { username, age, sex }
 
 let totalOnline = 0;
 
@@ -78,10 +79,13 @@ function tryMatch() {
     activePairs[callerID] = calleeID;
     activePairs[calleeID] = callerID;
 
-    // Tell caller to initiate (create offer)
-    caller.emit('matched', { role: 'caller', partnerId: calleeID });
-    // Tell callee to wait for offer
-    callee.emit('matched', { role: 'callee', partnerId: callerID });
+    const callerProfile = userProfiles[callerID] || null;
+    const calleeProfile = userProfiles[calleeID] || null;
+
+    // Tell caller to initiate (create offer), send callee's profile
+    caller.emit('matched', { role: 'caller', partnerId: calleeID, partnerProfile: calleeProfile });
+    // Tell callee to wait for offer, send caller's profile
+    callee.emit('matched', { role: 'callee', partnerId: callerID, partnerProfile: callerProfile });
 
     console.log(`✅ Paired: ${callerID.slice(0,6)} ↔ ${calleeID.slice(0,6)}`);
   }
@@ -96,6 +100,15 @@ io.on('connection', (socket) => {
   totalOnline++;
   broadcastOnlineCount();
   console.log(`🔌 Connected: ${socket.id.slice(0,6)} | Online: ${totalOnline}`);
+
+  // ── Save profile ─────────────────────────────────────────────────
+  socket.on('set_profile', (profile) => {
+    userProfiles[socket.id] = {
+      username: String(profile.username || 'Anonymous').slice(0, 30),
+      age:      parseInt(profile.age) || 18,
+      sex:      ['Male','Female','Other'].includes(profile.sex) ? profile.sex : 'Other',
+    };
+  });
 
   // ── User joins the queue ──────────────────────────────────────────
   socket.on('find_stranger', () => {
@@ -169,6 +182,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     totalOnline = Math.max(0, totalOnline - 1);
     broadcastOnlineCount();
+    delete userProfiles[socket.id];
 
     const partnerId = unpair(socket.id);
     removeFromQueue(socket.id);
