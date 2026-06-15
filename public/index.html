@@ -281,37 +281,40 @@
       .your-video-wrap { width:100px; height:75px; bottom:70px; }
     }
 
-    /* ─── PROFILE SETUP ─── */
-    #profile-screen {
-      display:none; flex-direction:column; align-items:center;
-      justify-content:center; height:100vh; gap:0; padding:24px;
-      background: radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.18) 0%, transparent 65%);
+    /* ─── PROFILE TOGGLES on landing ─── */
+    .profile-toggles {
+      display:flex; flex-direction:column; align-items:center; gap:12px;
+      margin-bottom:24px;
     }
-    .profile-card {
+    .toggle-row { display:flex; align-items:center; gap:10px; }
+    .toggle-label { font-size:13px; color:var(--muted); width:32px; text-align:right; }
+    .pill-group { display:flex; gap:6px; }
+    .pill {
       background:var(--surface); border:1px solid var(--border);
-      border-radius:20px; padding:36px 32px; max-width:420px; width:100%;
-      display:flex; flex-direction:column; gap:20px;
+      color:var(--muted); padding:7px 18px; border-radius:50px;
+      font-size:13px; font-weight:600; cursor:pointer;
+      transition:all 0.15s;
     }
-    .profile-card h2 { font-size:22px; font-weight:800; text-align:center; }
-    .profile-card p { font-size:14px; color:var(--muted); text-align:center; margin-top:-12px; }
-    .field { display:flex; flex-direction:column; gap:6px; }
-    .field label { font-size:13px; color:var(--muted); font-weight:600; }
-    .field input, .field select {
-      background:var(--surface2); border:1px solid var(--border);
-      border-radius:10px; padding:11px 14px; color:var(--text);
-      font-size:15px; outline:none; transition:border-color 0.15s;
-    }
-    .field input:focus, .field select:focus { border-color:var(--accent); }
-    .field select option { background:var(--surface2); }
-    .save-btn {
+    .pill:hover { border-color:var(--accent2); color:var(--text); }
+    .pill.active {
       background:linear-gradient(135deg,var(--accent),var(--accent2));
-      color:#fff; border:none; padding:14px; border-radius:50px;
-      font-size:16px; font-weight:700; cursor:pointer;
-      box-shadow:0 0 24px var(--accent-glow); transition:transform 0.15s;
-      margin-top:4px;
+      border-color:transparent; color:#fff;
     }
-    .save-btn:hover { transform:scale(1.02); }
-    .field-error { font-size:12px; color:var(--danger); display:none; }
+    .age-stepper { display:flex; align-items:center; gap:0; }
+    .age-btn {
+      width:32px; height:32px; background:var(--surface); border:1px solid var(--border);
+      color:var(--text); font-size:18px; cursor:pointer; transition:all 0.15s;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .age-btn:first-child { border-radius:50px 0 0 50px; }
+    .age-btn:last-child  { border-radius:0 50px 50px 0; }
+    .age-btn:hover { background:var(--surface2); border-color:var(--accent2); }
+    .age-display {
+      background:var(--surface); border-top:1px solid var(--border);
+      border-bottom:1px solid var(--border); padding:0 16px;
+      height:32px; display:flex; align-items:center; justify-content:center;
+      font-size:15px; font-weight:700; min-width:48px;
+    }
 
     /* ─── STRANGER PROFILE BADGE ─── */
     .partner-badge {
@@ -333,30 +336,6 @@
 </head>
 <body>
 
-<!-- ═══ PROFILE SETUP ═══ -->
-<div id="profile-screen">
-  <div class="profile-card">
-    <h2>Before you start</h2>
-    <p>Tell us a bit about yourself — saved for next time</p>
-    <div class="field">
-      <label>Age</label>
-      <input id="p-age" type="number" placeholder="Your age (18+)" min="18" max="99" />
-      <span class="field-error" id="err-age">Must be 18 or older</span>
-    </div>
-    <div class="field">
-      <label>Sex</label>
-      <select id="p-sex">
-        <option value="">Select...</option>
-        <option value="Male">Male</option>
-        <option value="Female">Female</option>
-        <option value="Other">Other</option>
-      </select>
-      <span class="field-error" id="err-sex">Please select an option</span>
-    </div>
-    <button class="save-btn" onclick="submitProfile()">Start Chatting →</button>
-  </div>
-</div>
-
 <!-- ═══ LANDING ═══ -->
 <div id="landing">
   <div class="logo-wrap">
@@ -364,6 +343,26 @@
     <div class="logo-text">StrangerMeet</div>
   </div>
   <p class="tagline">Meet random people from around the world — instantly.</p>
+
+  <div class="profile-toggles">
+    <div class="toggle-row">
+      <span class="toggle-label">Age</span>
+      <div class="age-stepper">
+        <button class="age-btn" onclick="changeAge(-1)">−</button>
+        <div class="age-display" id="age-display">21</div>
+        <button class="age-btn" onclick="changeAge(1)">+</button>
+      </div>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Sex</span>
+      <div class="pill-group">
+        <button class="pill" id="pill-Male"   onclick="setSex('Male')">Male</button>
+        <button class="pill" id="pill-Female" onclick="setSex('Female')">Female</button>
+        <button class="pill" id="pill-Other"  onclick="setSex('Other')">Other</button>
+      </div>
+    </div>
+  </div>
+
   <button class="start-btn" onclick="goToPermission()">Start Chatting</button>
   <div class="features">
     <div class="feature"><div class="feature-icon">🎥</div><span>Video Chat</span></div>
@@ -509,44 +508,54 @@ const ICE_SERVERS = {
 // ══════════════════════════════════════
 //  NAVIGATION
 // ══════════════════════════════════════
-const ALL_SCREENS = ['profile-screen','landing','permission-screen','chat-room'];
+const ALL_SCREENS = ['landing','permission-screen','chat-room'];
 
 function show(id) {
   ALL_SCREENS.forEach(s => {
     const el = document.getElementById(s);
     if (el) el.style.display = 'none';
   });
-  const target = document.getElementById(id);
-  if (target) target.style.display = 'flex';
+  document.getElementById(id).style.display = 'flex';
 }
 
 function showLanding() { show('landing'); }
 
-// Load profile from localStorage on page load
+// ── Profile state ─────────────────────────────────────────────────
+let _age = 21;
+let _sex = '';
+
+function changeAge(delta) {
+  _age = Math.min(99, Math.max(18, _age + delta));
+  document.getElementById('age-display').textContent = _age;
+  saveProfile();
+}
+
+function setSex(val) {
+  _sex = val;
+  ['Male','Female','Other'].forEach(s =>
+    document.getElementById('pill-' + s).classList.toggle('active', s === val)
+  );
+  saveProfile();
+}
+
+function saveProfile() {
+  window._userProfile = { age: _age, sex: _sex };
+  localStorage.setItem('sm_profile', JSON.stringify(window._userProfile));
+}
+
+// Load saved profile or defaults on page load
 (function init() {
   const saved = localStorage.getItem('sm_profile');
   if (saved) {
-    window._userProfile = JSON.parse(saved);
-    showLanding();
-  } else {
-    show('profile-screen');
+    const p = JSON.parse(saved);
+    _age = p.age || 21;
+    _sex = p.sex || '';
   }
-})();
-
-function submitProfile() {
-  const age = parseInt(document.getElementById('p-age').value);
-  const sex = document.getElementById('p-sex').value;
-
-  document.getElementById('err-age').style.display = (!age || age < 18) ? 'block' : 'none';
-  document.getElementById('err-sex').style.display = (!sex) ? 'block' : 'none';
-
-  if (!age || age < 18 || !sex) return;
-
-  const profile = { age, sex };
-  localStorage.setItem('sm_profile', JSON.stringify(profile));
-  window._userProfile = profile;
+  document.getElementById('age-display').textContent = _age;
+  if (_sex) setSex(_sex);
+  window._userProfile = { age: _age, sex: _sex };
   showLanding();
-}
+})();
 
 function goToPermission() { show('permission-screen'); }
 
