@@ -104,9 +104,8 @@ io.on('connection', (socket) => {
   // ── Save profile ─────────────────────────────────────────────────
   socket.on('set_profile', (profile) => {
     userProfiles[socket.id] = {
-      username: String(profile.username || 'Anonymous').slice(0, 30),
-      age:      parseInt(profile.age) || 18,
-      sex:      ['Male','Female','Other'].includes(profile.sex) ? profile.sex : 'Other',
+      age: parseInt(profile.age) || 18,
+      sex: ['Male','Female','Other'].includes(profile.sex) ? profile.sex : 'Other',
     };
   });
 
