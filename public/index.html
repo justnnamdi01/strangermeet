@@ -36,23 +36,23 @@
       align-items: center;
       justify-content: center;
       height: 100vh;
-      background: radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.18) 0%, transparent 65%);
+      background: url('/bg-desktop.jpg') center center / cover no-repeat;
+      position: relative;
     }
-    .logo-wrap { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
-    .logo-icon {
-      width:52px; height:52px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      border-radius:16px;
-      display:flex; align-items:center; justify-content:center;
-      font-size:26px;
-      box-shadow: 0 0 24px var(--accent-glow);
+    #landing::before {
+      content:'';
+      position:absolute; inset:0;
+      background: linear-gradient(to bottom,
+        rgba(8,8,9,0.55) 0%,
+        rgba(8,8,9,0.45) 50%,
+        rgba(8,8,9,0.75) 100%);
+      z-index:0;
     }
-    .logo-text {
-      font-size:32px; font-weight:800; letter-spacing:-0.5px;
-      background: linear-gradient(90deg,#fff 40%,var(--accent2));
-      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-    }
-    .tagline { font-size:17px; color:var(--muted); margin-bottom:44px; }
+    #landing > * { position:relative; z-index:1; }
+
+    .logo-wrap { display:flex; align-items:center; justify-content:center; margin-bottom:16px; }
+    .logo-img { height:100px; width:auto; filter:drop-shadow(0 0 20px rgba(124,58,237,0.5)); }
+    .tagline { font-size:17px; color:rgba(255,255,255,0.8); margin-bottom:44px; text-shadow:0 1px 8px rgba(0,0,0,0.6); }
     .start-btn {
       background: linear-gradient(135deg, var(--accent), var(--accent2));
       color:#fff; border:none;
@@ -278,11 +278,17 @@
     /* ─── COPPA GATE ─── */
     #coppa-gate {
       position:fixed; inset:0; z-index:999;
-      background:rgba(8,8,9,0.97); backdrop-filter:blur(8px);
+      background:url('/bg-desktop.jpg') center center / cover no-repeat;
+      backdrop-filter:blur(2px);
       display:flex; align-items:center; justify-content:center; padding:24px;
     }
+    #coppa-gate::before {
+      content:''; position:absolute; inset:0;
+      background:rgba(8,8,9,0.75); z-index:0;
+    }
+    #coppa-gate > * { position:relative; z-index:1; }
     .coppa-card {
-      background:var(--surface); border:1px solid var(--border);
+      background:rgba(24,24,28,0.92); border:1px solid var(--border); backdrop-filter:blur(12px);
       border-radius:20px; padding:36px 28px; max-width:400px; width:100%;
       display:flex; flex-direction:column; align-items:center; gap:16px; text-align:center;
     }
@@ -304,9 +310,11 @@
 
     /* ─── MOBILE ─── */
     @media (max-width:600px) {
-      /* Landing */
-      .logo-text { font-size:24px; }
-      .logo-icon { width:40px; height:40px; font-size:20px; border-radius:12px; }
+      /* Landing — swap to mobile background */
+      #landing { background-image: url('/bg-mobile.jpg'); }
+      #coppa-gate { background-image: url('/bg-mobile.jpg'); }
+
+      .logo-img { height:72px; }
       .tagline { font-size:14px; margin-bottom:28px; text-align:center; padding:0 16px; }
       .start-btn { padding:15px 40px; font-size:16px; }
       .features { gap:12px; flex-wrap:wrap; justify-content:center; }
@@ -422,8 +430,7 @@
 <!-- ═══ LANDING ═══ -->
 <div id="landing">
   <div class="logo-wrap">
-    <div class="logo-icon">👥</div>
-    <div class="logo-text">StrangerMeet</div>
+    <img src="/logo.png" alt="StrangerMeet" class="logo-img" />
   </div>
   <p class="tagline">Meet random people from around the world — instantly.</p>
 
