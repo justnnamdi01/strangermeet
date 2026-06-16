@@ -275,10 +275,72 @@
     }
     .home-btn:hover { border-color:var(--muted); color:var(--text); }
 
-    @media (max-width:700px) {
+    /* ─── COPPA GATE ─── */
+    #coppa-gate {
+      position:fixed; inset:0; z-index:999;
+      background:rgba(8,8,9,0.97); backdrop-filter:blur(8px);
+      display:flex; align-items:center; justify-content:center; padding:24px;
+    }
+    .coppa-card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:36px 28px; max-width:400px; width:100%;
+      display:flex; flex-direction:column; align-items:center; gap:16px; text-align:center;
+    }
+    .coppa-icon { font-size:48px; }
+    .coppa-card h2 { font-size:20px; font-weight:800; }
+    .coppa-card p { font-size:13px; color:var(--muted); line-height:1.7; }
+    .coppa-card p a { color:var(--accent2); text-decoration:none; }
+    .coppa-confirm {
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      color:#fff; border:none; padding:14px 36px; border-radius:50px;
+      font-size:15px; font-weight:700; cursor:pointer; width:100%;
+      box-shadow:0 0 24px var(--accent-glow); transition:transform 0.15s; margin-top:4px;
+    }
+    .coppa-confirm:hover { transform:scale(1.02); }
+    .coppa-deny {
+      background:none; border:none; color:var(--muted);
+      font-size:12px; cursor:pointer; text-decoration:underline;
+    }
+
+    /* ─── MOBILE ─── */
+    @media (max-width:600px) {
+      /* Landing */
+      .logo-text { font-size:24px; }
+      .logo-icon { width:40px; height:40px; font-size:20px; border-radius:12px; }
+      .tagline { font-size:14px; margin-bottom:28px; text-align:center; padding:0 16px; }
+      .start-btn { padding:15px 40px; font-size:16px; }
+      .features { gap:12px; flex-wrap:wrap; justify-content:center; }
+      .feature-icon { width:38px; height:38px; font-size:17px; }
+      .disclaimer { font-size:11px; text-align:center; padding:0 16px; }
+
+      /* Profile toggles */
+      .pill { padding:6px 13px; font-size:12px; }
+
+      /* Chat room — stack video on top, chat below */
       #chat-room { flex-direction:column; }
-      .chat-sidebar { width:100%; height:260px; border-left:none; border-top:1px solid var(--border); }
-      .your-video-wrap { width:100px; height:75px; bottom:70px; }
+      .video-area { flex:none; height:55vh; min-height:200px; }
+      .chat-sidebar {
+        width:100%; flex:1; border-left:none;
+        border-top:1px solid var(--border); min-height:0;
+      }
+
+      /* PiP — smaller, out of the way of controls */
+      .your-video-wrap { width:80px; height:60px; bottom:88px; right:8px; border-radius:8px; }
+
+      /* Controls — tighter on mobile */
+      .controls { gap:8px; padding:0 10px; height:76px; }
+      .ctrl-btn { padding:8px 10px; min-width:56px; font-size:11px; border-radius:10px; }
+      .ctrl-btn .icon { font-size:17px; }
+
+      /* Partner badge — smaller */
+      .partner-badge { padding:6px 10px; gap:7px; border-radius:10px; }
+      .partner-avatar-sm { width:26px; height:26px; font-size:12px; }
+      .partner-name-sm { font-size:12px; }
+      .partner-meta-sm { font-size:10px; }
+
+      /* Permission screen */
+      #permission-screen h2 { font-size:20px; }
+      .perm-icon { font-size:44px; }
     }
 
     /* ─── PROFILE TOGGLES on landing ─── */
@@ -335,6 +397,27 @@
   </style>
 </head>
 <body>
+
+<!-- ═══ COPPA AGE GATE ═══ -->
+<div id="coppa-gate" style="display:none">
+  <div class="coppa-card">
+    <div class="coppa-icon">🔞</div>
+    <h2>You must be 18 or older</h2>
+    <p>
+      StrangerMeet is intended for adults only. In compliance with the
+      <strong>Children's Online Privacy Protection Act (COPPA)</strong>,
+      we do not knowingly collect information from anyone under 13.
+      This site is strictly for users aged <strong>18+</strong>.
+    </p>
+    <p style="font-size:12px">
+      By continuing you confirm you are at least 18 years old and agree to our
+      <a href="#" onclick="return false">Terms of Service</a> and
+      <a href="#" onclick="return false">Privacy Policy</a>.
+    </p>
+    <button class="coppa-confirm" onclick="acceptCoppa()">I am 18 or older — Continue</button>
+    <button class="coppa-deny" onclick="denyCoppa()">I am under 18 — Exit</button>
+  </div>
+</div>
 
 <!-- ═══ LANDING ═══ -->
 <div id="landing">
@@ -543,6 +626,16 @@ function saveProfile() {
   localStorage.setItem('sm_profile', JSON.stringify(window._userProfile));
 }
 
+// ── COPPA gate ────────────────────────────────────────────────────
+function acceptCoppa() {
+  localStorage.setItem('sm_coppa', '1');
+  document.getElementById('coppa-gate').style.display = 'none';
+}
+
+function denyCoppa() {
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#8888a0;font-size:15px">This site is for adults 18+ only.</div>';
+}
+
 // Load saved profile or defaults on page load
 (function init() {
   const saved = localStorage.getItem('sm_profile');
@@ -555,6 +648,11 @@ function saveProfile() {
   if (_sex) setSex(_sex);
   window._userProfile = { age: _age, sex: _sex };
   showLanding();
+
+  // Show COPPA gate if not yet accepted
+  if (!localStorage.getItem('sm_coppa')) {
+    document.getElementById('coppa-gate').style.display = 'flex';
+  }
 })();
 
 function goToPermission() { show('permission-screen'); }
