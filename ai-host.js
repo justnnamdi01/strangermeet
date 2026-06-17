@@ -6,10 +6,10 @@
  * this is a disclosed assistant, NOT a fake human.
  *
  * Two personas: Aria (female) and Leo (male).
- * Powered by Claude. Requires the ANTHROPIC_API_KEY environment variable.
+ * Powered by Google Gemini Flash (free tier). Requires the GEMINI_API_KEY environment variable.
  */
 
-const AI_MODEL = 'claude-haiku-4-5-20251001'; // fast + cheap, good for casual chat
+const AI_MODEL = 'gemini-2.0-flash'; // fast + free tier, good for casual chat
 
 // Shared rules every persona follows
 const SHARED_RULES = `
@@ -76,35 +76,45 @@ function getPersona(key) {
   return PERSONAS[key] || PERSONAS.aria;
 }
 
-const AI_ENABLED = !!process.env.ANTHROPIC_API_KEY;
+const AI_ENABLED = !!process.env.GEMINI_API_KEY;
 
 /**
- * Call Claude with the conversation history and return a reply string.
+ * Generate a reply from Google Gemini Flash and return it as a string.
  * history = [{ role: 'user' | 'assistant', content: '...' }, ...]
+ * (Gemini uses 'model' instead of 'assistant', so we map it below.)
  */
-async function callClaude(systemPrompt, history) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+async function generateReply(systemPrompt, history) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+
+  const contents = history.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+
+  const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: AI_MODEL,
-      max_tokens: 150,
-      system: systemPrompt,
-      messages: history,
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents,
+      generationConfig: { maxOutputTokens: 150, temperature: 0.9 },
     }),
   });
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    throw new Error(`Claude API ${res.status}: ${errText}`);
+    throw new Error(`Gemini API ${res.status}: ${errText}`);
   }
 
   const data = await res.json();
-  return (data.content && data.content[0] && data.content[0].text || '').trim();
+  const text =
+    data.candidates &&
+    data.candidates[0] &&
+    data.candidates[0].content &&
+    data.candidates[0].content.parts &&
+    data.candidates[0].content.parts[0] &&
+    data.candidates[0].content.parts[0].text;
+  return (text || '').trim();
 }
 
-module.exports = { AI_ENABLED, AI_MODEL, PERSONAS, pickPersona, getPersona, callClaude };
+module.exports = { AI_ENABLED, AI_MODEL, PERSONAS, pickPersona, getPersona, generateReply };

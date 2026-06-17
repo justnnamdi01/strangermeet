@@ -185,7 +185,7 @@ async function handleAIMessage(socketId, userText) {
   let reply;
   try {
     const persona = ai.getPersona(session.persona);
-    reply = await ai.callClaude(persona.system, session.history);
+    reply = await ai.generateReply(persona.system, session.history);
   } catch (e) {
     console.error('AI error:', e.message);
     reply = "sorry, my connection glitched for a sec 😅 what were you saying?";
@@ -352,5 +352,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`\n🚀 StrangerMeet server running on port ${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/health`);
-  console.log(`   AI host: ${ai.AI_ENABLED ? '✅ enabled' : '⚠️  disabled (set ANTHROPIC_API_KEY)'}\n`);
+  console.log(`   AI host: ${ai.AI_ENABLED ? '✅ enabled' : '⚠️  disabled (set GEMINI_API_KEY)'}\n`);
 });
