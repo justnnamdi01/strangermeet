@@ -399,8 +399,14 @@
       display:flex; align-items:center; justify-content:center; font-size:14px;
     }
     .partner-info { display:flex; flex-direction:column; gap:1px; }
-    .partner-name-sm { font-size:13px; font-weight:700; }
+    .partner-name-sm { font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; }
     .partner-meta-sm { font-size:11px; color:var(--muted); }
+    .ai-tag {
+      display:none; align-items:center;
+      font-size:9px; font-weight:800; letter-spacing:0.5px;
+      background:linear-gradient(135deg,#06b6d4,#3b82f6); color:#fff;
+      padding:1px 6px; border-radius:6px; text-transform:uppercase;
+    }
 
   </style>
 </head>
@@ -483,18 +489,21 @@
 
       <!-- Partner profile badge -->
       <div class="partner-badge" id="partner-badge">
-        <div class="partner-avatar-sm">🧑</div>
+        <div class="partner-avatar-sm" id="partner-avatar-sm">🧑</div>
         <div class="partner-info">
-          <div class="partner-name-sm" id="partner-name">Stranger</div>
+          <div class="partner-name-sm">
+            <span id="partner-name">Stranger</span>
+            <span class="ai-tag" id="partner-ai-tag">AI</span>
+          </div>
           <div class="partner-meta-sm" id="partner-meta"></div>
         </div>
       </div>
 
       <!-- Placeholder shown when stranger has no cam or is text-only -->
       <div class="stranger-placeholder" id="stranger-placeholder" style="display:none">
-        <div class="stranger-avatar">🧑</div>
-        <div class="stranger-name">Stranger</div>
-        <div class="stranger-status"><div class="status-dot"></div><span>Connected</span></div>
+        <div class="stranger-avatar" id="stranger-avatar">🧑</div>
+        <div class="stranger-name" id="stranger-name">Stranger</div>
+        <div class="stranger-status"><div class="status-dot"></div><span id="stranger-status-text">Connected</span></div>
       </div>
 
       <!-- Searching overlay -->
@@ -579,6 +588,7 @@ let camOn         = true;
 let isConnected   = false;
 let myRole        = null;
 let typingTimer   = null;
+let inAISession   = false;
 
 // STUN servers (Google's free public servers + placeholder for TURN)
 const ICE_SERVERS = {
@@ -688,14 +698,28 @@ function startChat(withCam) {
   connectSocket();
 }
 
-function showPartnerBadge(profile) {
-  const badge = document.getElementById('partner-badge');
-  if (profile) {
-    document.getElementById('partner-name').textContent = `${profile.sex}, ${profile.age}`;
-    document.getElementById('partner-meta').textContent = 'Stranger';
+function showPartnerBadge(profile, isAI) {
+  const badge   = document.getElementById('partner-badge');
+  const nameEl  = document.getElementById('partner-name');
+  const metaEl  = document.getElementById('partner-meta');
+  const avatarEl = document.getElementById('partner-avatar-sm');
+  const aiTag   = document.getElementById('partner-ai-tag');
+
+  if (isAI && profile) {
+    nameEl.textContent = profile.name || 'AI Host';
+    metaEl.textContent = `${profile.sex}, ${profile.age}`;
+    avatarEl.textContent = profile.avatar || '🤖';
+    aiTag.style.display = 'inline-flex';
+  } else if (profile) {
+    nameEl.textContent = `${profile.sex}, ${profile.age}`;
+    metaEl.textContent = 'Stranger';
+    avatarEl.textContent = '🧑';
+    aiTag.style.display = 'none';
   } else {
-    document.getElementById('partner-name').textContent = 'Stranger';
-    document.getElementById('partner-meta').textContent = '';
+    nameEl.textContent = 'Stranger';
+    metaEl.textContent = '';
+    avatarEl.textContent = '🧑';
+    aiTag.style.display = 'none';
   }
   badge.style.display = 'flex';
 }
@@ -708,6 +732,8 @@ function goHome() {
   cleanupPeer();
   stopMedia();
   hidePartnerBadge();
+  hideTyping();
+  inAISession = false;
   if (socket) { socket.disconnect(); socket = null; }
   showLanding();
 }
@@ -742,11 +768,25 @@ function connectSocket() {
     setSearchingState();
   });
 
-  // Server paired us with someone
-  socket.on('matched', async ({ role, partnerProfile }) => {
+  // Server paired us with someone (a real stranger OR the AI host)
+  socket.on('matched', async ({ role, partnerProfile, isAI }) => {
     myRole = role;
-    showPartnerBadge(partnerProfile);
-    setConnectedState();
+    inAISession = !!isAI;
+    showPartnerBadge(partnerProfile, isAI);
+    setConnectedState(isAI);
+
+    if (isAI) {
+      // AI host is text-only — no video/WebRTC. Show its avatar in the video area.
+      cleanupPeer();
+      const av = partnerProfile && partnerProfile.avatar ? partnerProfile.avatar : '🤖';
+      document.getElementById('stranger-avatar').textContent = av;
+      document.getElementById('stranger-name').textContent =
+        (partnerProfile && partnerProfile.name) ? partnerProfile.name : 'AI Host';
+      document.getElementById('stranger-status-text').textContent = 'AI Host';
+      document.getElementById('stranger-placeholder').style.display = 'flex';
+      return;
+    }
+
     await setupPeerConnection();
     if (role === 'caller') {
       // Create and send offer
@@ -754,6 +794,20 @@ function connectSocket() {
       await peerConn.setLocalDescription(offer);
       socket.emit('offer', { offer });
     }
+  });
+
+  // AI host is typing
+  socket.on('partner_typing', (isTyping) => {
+    if (isTyping) showTyping(); else hideTyping();
+  });
+
+  // A real stranger became available — leaving the AI host
+  socket.on('real_found', () => {
+    inAISession = false;
+    hideTyping();
+    clearMessages();
+    hidePartnerBadge();
+    addSystemMsg('✨ A real stranger just connected!');
   });
 
   // Signaling relay
@@ -848,7 +902,9 @@ function cleanupPeer() {
 function findNext() {
   cleanupPeer();
   isConnected = false;
+  inAISession = false;
   clearMessages();
+  hideTyping();
   hidePartnerBadge();
   document.getElementById('disconnected-overlay').classList.add('hidden');
   disableChatInput();
@@ -866,14 +922,20 @@ function setSearchingState() {
   disableChatInput();
 }
 
-function setConnectedState() {
+function setConnectedState(isAI) {
   isConnected = true;
   document.getElementById('searching-overlay').classList.add('hidden');
   document.getElementById('disconnected-overlay').classList.add('hidden');
   document.getElementById('stranger-placeholder').style.display = 'flex';
-  setOnlineBadge('Connected', 'var(--success)', 'rgba(34,197,94,0.15)');
+  setOnlineBadge(isAI ? 'AI Host' : 'Connected',
+                 isAI ? '#3b82f6' : 'var(--success)',
+                 isAI ? 'rgba(59,130,246,0.15)' : 'rgba(34,197,94,0.15)');
   enableChatInput();
-  addSystemMsg('✅ You\'re now chatting with a stranger!');
+  if (isAI) {
+    addSystemMsg('💬 No one\'s free right now, so our AI host is keeping you company. You\'ll be switched to a real stranger the moment one\'s available.');
+  } else {
+    addSystemMsg('✅ You\'re now chatting with a stranger!');
+  }
 }
 
 function setDisconnectedState() {
