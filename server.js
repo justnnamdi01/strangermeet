@@ -382,6 +382,56 @@ app.get('/api/subscribe/count', (req, res) => {
   res.json({ count: subscribers.length + COUNT_BASE });
 });
 
+// ─── Admin: view & download the email list ───────────────────────────
+// Protected by HTTP Basic Auth. Username is ignored; password must match the
+// ADMIN_PASSWORD env var. If ADMIN_PASSWORD is unset, these routes 404 so the
+// list is never exposed.
+function requireAdmin(req, res) {
+  const pass = process.env.ADMIN_PASSWORD;
+  if (!pass) { res.status(404).send('Not found'); return false; }
+  const header = req.headers.authorization || '';
+  const [scheme, encoded] = header.split(' ');
+  let ok = false;
+  if (scheme === 'Basic' && encoded) {
+    const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+    ok = decoded.slice(decoded.indexOf(':') + 1) === pass;
+  }
+  if (!ok) {
+    res.set('WWW-Authenticate', 'Basic realm="StrangerMeet Admin"').status(401).send('Authentication required');
+    return false;
+  }
+  return true;
+}
+
+function toCsv(rows) {
+  return rows
+    .map((r) => r.map((f) => `"${String(f).replace(/"/g, '""')}"`).join(','))
+    .join('\r\n');
+}
+
+app.get('/admin', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.send(`<!doctype html><meta charset="utf-8">
+    <title>StrangerMeet · Email list</title>
+    <body style="font-family:system-ui;background:#0d0d0f;color:#f0f0f5;display:flex;
+      flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:20px">
+      <h1 style="font-size:22px">📧 Early-access signups</h1>
+      <div style="font-size:48px;font-weight:800;color:#a855f7">${subscribers.length}</div>
+      <a href="/admin/emails.csv" download
+        style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;
+        padding:14px 32px;border-radius:50px;text-decoration:none;font-weight:700">
+        Download CSV</a>
+    </body>`);
+});
+
+app.get('/admin/emails.csv', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const rows = [['email', 'signed_up_at']].concat(subscribers.map((s) => [s.email, s.at]));
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', 'attachment; filename="strangermeet-emails.csv"');
+  res.send(toCsv(rows));
+});
+
 // ─── Health check endpoint ───────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({
