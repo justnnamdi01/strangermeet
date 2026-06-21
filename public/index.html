@@ -316,6 +316,9 @@
 
       .logo-img { height:72px; }
       .tagline { font-size:14px; margin-bottom:28px; text-align:center; padding:0 16px; }
+
+      .early-access { margin-top:28px; padding:16px 16px; }
+      .ea-btn { padding:11px 16px; }
       .start-btn { padding:15px 40px; font-size:16px; }
       .features { gap:12px; flex-wrap:wrap; justify-content:center; }
       .feature-icon { width:38px; height:38px; font-size:17px; }
@@ -385,6 +388,37 @@
       height:32px; display:flex; align-items:center; justify-content:center;
       font-size:15px; font-weight:700; min-width:48px;
     }
+
+    /* ─── EARLY ACCESS EMAIL CAPTURE ─── */
+    .early-access {
+      margin-top:36px; width:100%; max-width:420px;
+      display:flex; flex-direction:column; align-items:center; gap:6px;
+      padding:20px 22px;
+      background:rgba(24,24,28,0.6); backdrop-filter:blur(8px);
+      border:1px solid var(--border); border-radius:18px;
+    }
+    .ea-headline { font-size:16px; font-weight:800; letter-spacing:-0.2px; }
+    .ea-sub { font-size:12.5px; color:var(--muted); text-align:center; margin-bottom:10px; line-height:1.5; }
+    .ea-form { display:flex; gap:8px; width:100%; }
+    .ea-input {
+      flex:1; min-width:0; background:var(--surface2); border:1px solid var(--border);
+      border-radius:50px; padding:11px 16px; color:var(--text);
+      font-size:14px; outline:none; transition:border-color 0.15s;
+    }
+    .ea-input::placeholder { color:var(--muted); }
+    .ea-input:focus { border-color:var(--accent); }
+    .ea-btn {
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      color:#fff; border:none; padding:11px 20px; border-radius:50px;
+      font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap;
+      box-shadow:0 0 18px var(--accent-glow); transition:transform 0.15s, opacity 0.15s;
+    }
+    .ea-btn:hover { transform:scale(1.03); }
+    .ea-btn:disabled { opacity:0.5; cursor:default; transform:none; }
+    .ea-count { font-size:13px; color:var(--accent2); font-weight:700; margin-top:10px; min-height:18px; }
+    .ea-msg { font-size:12.5px; min-height:16px; }
+    .ea-msg.success { color:var(--success); }
+    .ea-msg.error { color:var(--danger); }
 
     /* ─── STRANGER PROFILE BADGE ─── */
     .partner-badge {
@@ -466,6 +500,19 @@
     <div class="feature"><div class="feature-icon">⚡</div><span>Instant Match</span></div>
     <div class="feature"><div class="feature-icon">🌍</div><span>Worldwide</span></div>
   </div>
+
+  <!-- ── Early access email capture ── -->
+  <div class="early-access" id="early-access">
+    <div class="ea-headline">🚀 Get early access</div>
+    <div class="ea-sub">Be the first in when we drop new features. No spam, just the launch.</div>
+    <form class="ea-form" id="ea-form" onsubmit="return submitEmail(event)">
+      <input class="ea-input" id="ea-email" type="email" placeholder="your@email.com" autocomplete="email" required />
+      <button class="ea-btn" id="ea-btn" type="submit">Notify me</button>
+    </form>
+    <div class="ea-count" id="ea-count"></div>
+    <div class="ea-msg" id="ea-msg"></div>
+  </div>
+
   <p class="disclaimer">By using StrangerMeet you agree to our Terms of Service. Must be 18+.</p>
 </div>
 
@@ -670,7 +717,61 @@ function denyCoppa() {
   if (!localStorage.getItem('sm_coppa')) {
     document.getElementById('coppa-gate').style.display = 'flex';
   }
+
+  loadRegisterCount();
 })();
+
+// ── Early access email capture ────────────────────────────────────
+function renderCount(n) {
+  const el = document.getElementById('ea-count');
+  el.textContent = `🔥 ${Number(n).toLocaleString()} people on the early-access list`;
+}
+
+async function loadRegisterCount() {
+  try {
+    const res = await fetch('/api/subscribe/count');
+    const data = await res.json();
+    renderCount(data.count || 0);
+  } catch (e) { /* offline / not deployed yet — leave blank */ }
+}
+
+async function submitEmail(e) {
+  e.preventDefault();
+  const input = document.getElementById('ea-email');
+  const btn   = document.getElementById('ea-btn');
+  const msg   = document.getElementById('ea-msg');
+  const email = input.value.trim();
+
+  if (!email) return false;
+  btn.disabled = true;
+  msg.className = 'ea-msg';
+  msg.textContent = '';
+
+  try {
+    const res = await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      msg.className = 'ea-msg success';
+      msg.textContent = data.already ? '✓ You\'re already on the list!' : '✓ You\'re in! We\'ll email you at launch.';
+      input.value = '';
+      if (typeof data.count === 'number') renderCount(data.count);
+    } else {
+      msg.className = 'ea-msg error';
+      msg.textContent = data.error || 'Something went wrong. Try again.';
+    }
+  } catch (err) {
+    msg.className = 'ea-msg error';
+    msg.textContent = 'Network error. Try again.';
+  } finally {
+    btn.disabled = false;
+  }
+  return false;
+}
 
 function goToPermission() { show('permission-screen'); }
 

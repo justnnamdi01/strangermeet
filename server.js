@@ -18,6 +18,7 @@ const http    = require('http');
 const { Server } = require('socket.io');
 const cors    = require('cors');
 const path    = require('path');
+const fs      = require('fs');
 const ai      = require('./ai-host');
 
 // ─── Setup ───────────────────────────────────────────────────────────
@@ -335,6 +336,52 @@ io.on('connection', (socket) => {
   });
 });
 
+// ─── Early-access email signups ──────────────────────────────────────
+// Stored as JSON on disk. On Railway, point DATA_DIR at a mounted Volume so
+// the list survives redeploys (the default filesystem is wiped each deploy).
+const DATA_DIR    = process.env.DATA_DIR || __dirname;
+const EMAILS_FILE = path.join(DATA_DIR, 'emails.json');
+// Optional head-start for social proof (e.g. set COUNT_BASE=250). Default 0.
+const COUNT_BASE  = parseInt(process.env.COUNT_BASE) || 0;
+
+let subscribers = [];
+try {
+  if (fs.existsSync(EMAILS_FILE)) {
+    subscribers = JSON.parse(fs.readFileSync(EMAILS_FILE, 'utf8')) || [];
+  }
+} catch (e) {
+  console.error('Could not read emails file:', e.message);
+}
+
+function saveSubscribers() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(EMAILS_FILE, JSON.stringify(subscribers, null, 2));
+  } catch (e) {
+    console.error('Could not save emails file:', e.message);
+  }
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+app.post('/api/subscribe', (req, res) => {
+  const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+  if (!EMAIL_RE.test(email) || email.length > 254) {
+    return res.status(400).json({ error: 'Please enter a valid email.' });
+  }
+  const exists = subscribers.some((s) => s.email === email);
+  if (!exists) {
+    subscribers.push({ email, at: new Date().toISOString() });
+    saveSubscribers();
+    console.log(`📧 New signup: ${email} | Total: ${subscribers.length}`);
+  }
+  res.json({ ok: true, already: exists, count: subscribers.length + COUNT_BASE });
+});
+
+app.get('/api/subscribe/count', (req, res) => {
+  res.json({ count: subscribers.length + COUNT_BASE });
+});
+
 // ─── Health check endpoint ───────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({
@@ -344,6 +391,7 @@ app.get('/health', (req, res) => {
     pairs:      Object.keys(activePairs).length / 2,
     aiChats:    Object.keys(aiSessions).length,
     aiEnabled:  ai.AI_ENABLED,
+    signups:    subscribers.length + COUNT_BASE,
   });
 });
 
