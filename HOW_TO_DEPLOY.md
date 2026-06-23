@@ -33,6 +33,7 @@ strangerapp-backend/
    - Click "New Project" → "Deploy from GitHub repo"
    - Select your repo
    - Railway auto-detects Node.js and runs `npm start`
+   - Set an environment variable: `COUNT_BASE = 250`
    - Click "Generate Domain" → you get a free URL like `strangermeet.up.railway.app`
    - Share that URL with the world! ✅
 

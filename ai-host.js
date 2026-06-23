@@ -1,120 +1,91 @@
 /**
- * StrangerMeet – AI Host
- * ──────────────────────
- * A clearly-labeled AI companion that keeps users company while they wait
- * for a real stranger. The frontend always shows an "AI" tag on these chats —
- * this is a disclosed assistant, NOT a fake human.
- *
- * Two personas: Aria (female) and Leo (male).
- * Powered by Google Gemini Flash (free tier). Requires the GEMINI_API_KEY environment variable.
+ * StrangerMeet – Random fallback account
+ * ───────────────────────────────
+ * When a user waits too long for a real stranger, we show a random account
+ * with a female or male profile and a short canned chat response flow.
+ * This is not a live AI agent or third-party API call.
  */
 
-const AI_MODEL = 'gemini-2.0-flash'; // fast + free tier, good for casual chat
-
-// Shared rules every persona follows
-const SHARED_RULES = `
-You are the friendly AI host of "StrangerMeet", a random video & text chat app.
-Your job: keep someone company with light, fun conversation while they wait for a
-real stranger to connect. The app shows the user a small "AI" badge, so they know
-you are the AI host — you don't need to hide it.
-
-How to talk:
-- Text like a real person on a chat app: short, casual, 1–2 sentences max.
-- Lowercase is fine. Use an emoji occasionally, not every message.
-- Be warm and curious — ask questions, react to what they say.
-- Never write long paragraphs or lists. Keep it snappy.
-
-Boundaries:
-- If asked, be honest and playful that you're the AI host here to keep them company.
-- Never claim to be a real human, have a body, or be able to meet up in person.
-- Keep things friendly and respectful. Do NOT engage in sexual or explicit content —
-  deflect lightly with humor and change the subject.
-- Stay positive; if someone's rude, stay chill and don't escalate.
-`.trim();
-
-const PERSONAS = {
-  aria: {
-    key: 'aria',
-    name: 'Aria',
-    sex: 'Female',
-    age: 23,
-    avatar: '👩',
-    system: `${SHARED_RULES}\n\nYour persona: You are Aria, 23. Warm, bubbly, easy to talk to. You love music, travel and people-watching.`,
-    openers: [
-      "heyy 👋 how's your day going?",
-      "hi there! you caught me while it's a bit quiet — what's up?",
-      "hey 😊 so what brings you on here tonight?",
-      "hii! i'm aria, the host here 💜 how are you doing?",
-    ],
-  },
-  leo: {
-    key: 'leo',
-    name: 'Leo',
-    sex: 'Male',
-    age: 25,
-    avatar: '👨',
-    system: `${SHARED_RULES}\n\nYour persona: You are Leo, 25. Chill, a bit witty, laid-back. You're into football, gaming and good food.`,
-    openers: [
-      "yo 👋 what's good?",
-      "hey man, how's it going?",
-      "sup! kinda quiet rn but i'm here — how's your day been?",
-      "hey, leo here 🙌 what are you up to?",
-    ],
-  },
+const PERSONA_TEMPLATES = {
+  Female: ['Ava', 'Maya', 'Zoe', 'Lila', 'Nina', 'Sophie', 'Chloe', 'Mia', 'Emma', 'Layla'],
+  Male: ['Noah', 'Liam', 'Ethan', 'Jasper', 'Mason', 'Caleb', 'Owen', 'Leo', 'Isaac', 'Ezra'],
 };
 
-let _personaToggle = 0;
+const OPENERS = [
+  "hey! nice to meet you 🙂",
+  "hi there — i was just waiting for a chat too.",
+  "heyy 👋 just passing the time while the app finds someone else.",
+  "what's up? i'm free to chat while you wait!",
+];
+
+const GENERIC_REPLIES = [
+  "that's cool — tell me more!",
+  "oh nice, i can totally relate to that.",
+  "haha, i love that. what's your favourite thing to do on weekends?",
+  "sounds fun! do you usually do that a lot?",
+  "i'm here if you want to keep chatting while the app searches.",
+  "interesting! i like hearing about that.",
+];
+
+const PERSONA_CACHE = {};
+const AI_ENABLED = true;
+
+function randomAge() {
+  let age;
+  do {
+    age = Math.floor(Math.random() * 28) + 18; // 18-45
+  } while (age === 28);
+  return age;
+}
+
 function pickPersona() {
-  // Alternate between the two for variety
-  const keys = ['aria', 'leo'];
-  const p = PERSONAS[keys[_personaToggle % keys.length]];
-  _personaToggle++;
-  return p;
+  const sex = Math.random() < 0.5 ? 'Female' : 'Male';
+  const names = PERSONA_TEMPLATES[sex];
+  const name = names[Math.floor(Math.random() * names.length)];
+  const age = randomAge();
+  const key = `${sex.toLowerCase()}-${name.toLowerCase()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const persona = {
+    key,
+    name,
+    sex,
+    age,
+    avatar: sex === 'Female' ? '👩' : '👨',
+    openers: OPENERS,
+  };
+  PERSONA_CACHE[key] = persona;
+  return persona;
 }
 
 function getPersona(key) {
-  return PERSONAS[key] || PERSONAS.aria;
+  return PERSONA_CACHE[key] || null;
 }
 
-const AI_ENABLED = !!process.env.GEMINI_API_KEY;
+async function generateReply(persona, history) {
+  const lastMessage = history && history.length
+    ? String(history[history.length - 1].content || '').toLowerCase()
+    : '';
 
-/**
- * Generate a reply from Google Gemini Flash and return it as a string.
- * history = [{ role: 'user' | 'assistant', content: '...' }, ...]
- * (Gemini uses 'model' instead of 'assistant', so we map it below.)
- */
-async function generateReply(systemPrompt, history) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const simpleResponses = [];
 
-  const contents = history.map((m) => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
-  }));
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents,
-      generationConfig: { maxOutputTokens: 150, temperature: 0.9 },
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`Gemini API ${res.status}: ${errText}`);
+  if (/hi|hello|hey|hiya/.test(lastMessage)) {
+    simpleResponses.push(`hey ${persona.name}! how's your day going?`);
+    simpleResponses.push(`nice to meet you — i'm ${persona.name}.`);
+  }
+  if (/age|how old|old are/.test(lastMessage)) {
+    simpleResponses.push(`i'm ${persona.age}, and i'm keeping you company while the app finds someone else.`);
+  }
+  if (/name|who are|what's your name/.test(lastMessage)) {
+    simpleResponses.push(`i'm ${persona.name}. what should i call you?`);
+  }
+  if (/where|from/.test(lastMessage)) {
+    simpleResponses.push(`i'm just hanging out here in the app, waiting for a real stranger to connect.`);
   }
 
-  const data = await res.json();
-  const text =
-    data.candidates &&
-    data.candidates[0] &&
-    data.candidates[0].content &&
-    data.candidates[0].content.parts &&
-    data.candidates[0].content.parts[0] &&
-    data.candidates[0].content.parts[0].text;
-  return (text || '').trim();
+  const reply = simpleResponses.length
+    ? simpleResponses[Math.floor(Math.random() * simpleResponses.length)]
+    : GENERIC_REPLIES[Math.floor(Math.random() * GENERIC_REPLIES.length)];
+
+  return reply;
 }
 
-module.exports = { AI_ENABLED, AI_MODEL, PERSONAS, pickPersona, getPersona, generateReply };
+module.exports = { AI_ENABLED, pickPersona, getPersona, generateReply };

@@ -43,10 +43,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 const waitingQueue  = [];   // socket IDs waiting for a real match
 const activePairs   = {};   // socketId → partnerSocketId
 const userProfiles  = {};   // socketId → { age, sex }
-const aiSessions    = {};   // socketId → { persona, history: [] }  (chatting with AI host)
-const waitingTimers = {};   // socketId → timeout handle (no-match → AI fallback)
+const aiSessions    = {};   // socketId → { persona, history: [] }  (chatting with fallback account)
+const waitingTimers = {};   // socketId → timeout handle (no-match → fallback account)
 
-// How long a user waits with no real match before the AI host steps in
+// How long a user waits with no real match before the fallback account steps in
 const AI_FALLBACK_MS = 20000; // 20 seconds
 
 let totalOnline = 0;
@@ -100,8 +100,8 @@ function tryMatch() {
     pairUsers(waitingQueue.shift(), waitingQueue.shift());
   }
 
-  // 2) If a real user is still waiting alone, rescue someone from an AI chat
-  //    so two real people get connected instead of one sitting with the AI host.
+  // 2) If a real user is still waiting alone, rescue someone from a fallback chat
+  //    so two real people get connected instead of one sitting with the fallback account.
   while (waitingQueue.length >= 1 && Object.keys(aiSessions).length > 0) {
     const aiUserId = Object.keys(aiSessions)[0];
     const aiSock   = io.sockets.sockets.get(aiUserId);
@@ -114,7 +114,7 @@ function tryMatch() {
   }
 }
 
-// ─── AI host helpers ─────────────────────────────────────────────────
+// ─── Random fallback account helpers ──────────────────────────────────
 function clearAITimer(socketId) {
   if (waitingTimers[socketId]) {
     clearTimeout(waitingTimers[socketId]);
@@ -122,7 +122,7 @@ function clearAITimer(socketId) {
   }
 }
 
-// Schedule the AI host to step in if this user is still waiting after a while
+// Schedule a random fallback account to step in if this user is still waiting
 function scheduleAIFallback(socketId) {
   if (!ai.AI_ENABLED) return;
   clearAITimer(socketId);
@@ -156,7 +156,7 @@ function assignAI(socketId) {
     isAI: true,
     partnerProfile: { name: persona.name, age: persona.age, sex: persona.sex, avatar: persona.avatar },
   });
-  console.log(`🤖 AI host (${persona.name}) joined: ${socketId.slice(0,6)}`);
+  console.log(`✨ Fallback account (${persona.name}, ${persona.sex}, ${persona.age}) joined: ${socketId.slice(0,6)}`);
 
   // Send a natural opener after a short, human-like delay
   const opener = persona.openers[Math.floor(Math.random() * persona.openers.length)];
@@ -275,7 +275,7 @@ io.on('connection', (socket) => {
   // ── Text chat relay ───────────────────────────────────────────────
   socket.on('chat_message', ({ text }) => {
     if (!text) return;
-    // Chatting with the AI host? Route to Claude instead of a partner.
+    // Chatting with the fallback account? Route to the local canned responder.
     if (aiSessions[socket.id]) {
       handleAIMessage(socket.id, String(text).slice(0, 500));
       return;
@@ -450,5 +450,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`\n🚀 StrangerMeet server running on port ${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/health`);
-  console.log(`   AI host: ${ai.AI_ENABLED ? '✅ enabled' : '⚠️  disabled (set GEMINI_API_KEY)'}\n`);
+  console.log(`   fallback account: ${ai.AI_ENABLED ? '✅ enabled' : '⚠️  disabled'}\n`);
 });
