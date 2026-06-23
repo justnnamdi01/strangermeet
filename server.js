@@ -341,8 +341,8 @@ io.on('connection', (socket) => {
 // the list survives redeploys (the default filesystem is wiped each deploy).
 const DATA_DIR    = process.env.DATA_DIR || __dirname;
 const EMAILS_FILE = path.join(DATA_DIR, 'emails.json');
-// Optional head-start for social proof (e.g. set COUNT_BASE=250). Default 0.
-const COUNT_BASE  = parseInt(process.env.COUNT_BASE) || 0;
+// Head-start for the signup counter. Defaults to 250; override with COUNT_BASE.
+const COUNT_BASE  = parseInt(process.env.COUNT_BASE) || 250;
 
 let subscribers = [];
 try {
