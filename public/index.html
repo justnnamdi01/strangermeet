@@ -719,7 +719,21 @@ function denyCoppa() {
   }
 
   loadRegisterCount();
+  trackVisit();
 })();
+
+// ── Visitor tracking ──────────────────────────────────────────────
+function trackVisit() {
+  const firstTime = !localStorage.getItem('sm_visitor');
+  if (firstTime) localStorage.setItem('sm_visitor', '1');
+  try {
+    fetch('/api/visit', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ firstTime }),
+    });
+  } catch (e) { /* ignore */ }
+}
 
 // ── Early access email capture ────────────────────────────────────
 function renderCount(n) {

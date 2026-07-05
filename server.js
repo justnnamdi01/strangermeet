@@ -382,6 +382,48 @@ app.get('/api/subscribe/count', (req, res) => {
   res.json({ count: subscribers.length + COUNT_BASE });
 });
 
+// ─── Visitor tracking ────────────────────────────────────────────────
+// Counts total pageviews and unique visitors (the browser reports whether it's
+// a first-time visit via localStorage). Stored on disk next to the emails.
+const VISITS_FILE = path.join(DATA_DIR, 'visits.json');
+let visits = { pageviews: 0, uniques: 0, days: {} };
+try {
+  if (fs.existsSync(VISITS_FILE)) {
+    visits = Object.assign(visits, JSON.parse(fs.readFileSync(VISITS_FILE, 'utf8')) || {});
+  }
+} catch (e) {
+  console.error('Could not read visits file:', e.message);
+}
+
+let visitsDirty = false;
+function saveVisits() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(VISITS_FILE, JSON.stringify(visits));
+  } catch (e) {
+    console.error('Could not save visits file:', e.message);
+  }
+}
+// Flush to disk at most once every 10s to avoid a write on every single hit.
+setInterval(() => { if (visitsDirty) { visitsDirty = false; saveVisits(); } }, 10000).unref();
+
+function todayKey() { return new Date().toISOString().slice(0, 10); }
+
+app.post('/api/visit', (req, res) => {
+  const firstTime = !!(req.body && req.body.firstTime);
+  const day = todayKey();
+  if (!visits.days[day]) visits.days[day] = { pageviews: 0, uniques: 0 };
+
+  visits.pageviews++;
+  visits.days[day].pageviews++;
+  if (firstTime) {
+    visits.uniques++;
+    visits.days[day].uniques++;
+  }
+  visitsDirty = true;
+  res.json({ ok: true });
+});
+
 // ─── Admin: view & download the email list ───────────────────────────
 // Protected by HTTP Basic Auth. Username is ignored; password must match the
 // ADMIN_PASSWORD env var. If ADMIN_PASSWORD is unset, these routes 404 so the
@@ -411,16 +453,29 @@ function toCsv(rows) {
 
 app.get('/admin', (req, res) => {
   if (!requireAdmin(req, res)) return;
+  const today = visits.days[todayKey()] || { pageviews: 0, uniques: 0 };
+  const stat = (label, value, color) => `
+    <div style="background:#18181c;border:1px solid #2e2e38;border-radius:16px;
+      padding:20px 28px;min-width:150px;text-align:center">
+      <div style="font-size:34px;font-weight:800;color:${color}">${Number(value).toLocaleString()}</div>
+      <div style="font-size:12px;color:#8888a0;margin-top:4px">${label}</div>
+    </div>`;
   res.send(`<!doctype html><meta charset="utf-8">
-    <title>StrangerMeet · Email list</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>StrangerMeet · Dashboard</title>
     <body style="font-family:system-ui;background:#0d0d0f;color:#f0f0f5;display:flex;
-      flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:20px">
-      <h1 style="font-size:22px">📧 Early-access signups</h1>
-      <div style="font-size:48px;font-weight:800;color:#a855f7">${subscribers.length}</div>
+      flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:24px;padding:24px;margin:0">
+      <h1 style="font-size:22px;margin:0">📊 StrangerMeet dashboard</h1>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center">
+        ${stat('Unique visitors', visits.uniques, '#22d3ee')}
+        ${stat('Total pageviews', visits.pageviews, '#3b82f6')}
+        ${stat('Visitors today', today.uniques, '#22c55e')}
+        ${stat('Email signups', subscribers.length, '#a855f7')}
+      </div>
       <a href="/admin/emails.csv" download
         style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;
         padding:14px 32px;border-radius:50px;text-decoration:none;font-weight:700">
-        Download CSV</a>
+        Download email list (CSV)</a>
     </body>`);
 });
 
@@ -442,6 +497,8 @@ app.get('/health', (req, res) => {
     aiChats:    Object.keys(aiSessions).length,
     aiEnabled:  ai.AI_ENABLED,
     signups:    subscribers.length + COUNT_BASE,
+    visitors:   visits.uniques,
+    pageviews:  visits.pageviews,
   });
 });
 
