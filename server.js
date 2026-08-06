@@ -382,6 +382,28 @@ app.get('/api/subscribe/count', (req, res) => {
   res.json({ count: subscribers.length + COUNT_BASE });
 });
 
+// ─── WebRTC ICE servers (STUN + optional TURN relay) ─────────────────
+// TURN lets users behind strict firewalls/NATs (~15%) connect. Configure it
+// with TURN_URL / TURN_USERNAME / TURN_CREDENTIAL env vars on Railway. TURN_URL
+// may be a comma-separated list (e.g. udp + tcp + tls variants). Without them,
+// only free STUN is returned (direct connections only).
+app.get('/api/ice', (req, res) => {
+  const iceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+  ];
+  if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    const urls = process.env.TURN_URL.split(',').map((u) => u.trim()).filter(Boolean);
+    iceServers.push({
+      urls,
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL,
+    });
+  }
+  res.json({ iceServers });
+});
+
 // ─── Visitor tracking ────────────────────────────────────────────────
 // Counts total pageviews and unique visitors (the browser reports whether it's
 // a first-time visit via localStorage). Stored on disk next to the emails.

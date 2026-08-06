@@ -637,20 +637,28 @@ let myRole        = null;
 let typingTimer   = null;
 let inAISession   = false;
 
-// STUN servers (Google's free public servers + placeholder for TURN)
-const ICE_SERVERS = {
+// ICE servers for WebRTC. Defaults to free STUN; the server adds a TURN relay
+// (from Railway env vars) via /api/ice so ~15% of users behind strict
+// firewalls/NATs can still connect. Credentials never live in this file.
+let ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    // Add TURN server here for production (Twilio / Coturn):
-    // {
-    //   urls: 'turn:your-turn-server.com:3478',
-    //   username: 'YOUR_USERNAME',
-    //   credential: 'YOUR_PASSWORD',
-    // }
   ],
 };
+
+let _iceLoaded = false;
+async function loadIceServers() {
+  try {
+    const res = await fetch('/api/ice');
+    const data = await res.json();
+    if (data && Array.isArray(data.iceServers) && data.iceServers.length) {
+      ICE_SERVERS = { iceServers: data.iceServers };
+    }
+  } catch (e) { /* keep the default STUN list */ }
+  _iceLoaded = true;
+}
 
 // ══════════════════════════════════════
 //  NAVIGATION
@@ -720,6 +728,7 @@ function denyCoppa() {
 
   loadRegisterCount();
   trackVisit();
+  loadIceServers();
 })();
 
 // ── Visitor tracking ──────────────────────────────────────────────
@@ -957,6 +966,7 @@ function connectSocket() {
 //  WEBRTC
 // ══════════════════════════════════════
 async function setupPeerConnection() {
+  if (!_iceLoaded) { try { await loadIceServers(); } catch (e) {} }
   cleanupPeer();
   peerConn = new RTCPeerConnection(ICE_SERVERS);
 
