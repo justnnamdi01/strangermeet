@@ -676,6 +676,7 @@ let isConnected   = false;
 let myRole        = null;
 let typingTimer   = null;
 let inAISession   = false;
+let dropTimer     = null;  // grace timer for transient WebRTC disconnects
 
 // ICE servers for WebRTC. Defaults to free STUN; the server adds a TURN relay
 // (from Railway env vars) via /api/ice so ~15% of users behind strict
@@ -1039,14 +1040,40 @@ async function setupPeerConnection() {
   peerConn.onconnectionstatechange = () => {
     if (!peerConn) return;
     const state = peerConn.connectionState;
-    if (state === 'failed' || state === 'disconnected') {
-      addSystemMsg('⚠️ Connection dropped. Searching for new stranger...');
+
+    // Recovered (or (re)connected) — cancel any pending drop.
+    if (state === 'connected') {
+      if (dropTimer) { clearTimeout(dropTimer); dropTimer = null; }
+      return;
+    }
+
+    // 'failed' is terminal — the connection cannot recover. Give up now.
+    if (state === 'failed') {
+      if (dropTimer) { clearTimeout(dropTimer); dropTimer = null; }
+      addSystemMsg('⚠️ Connection lost. Searching for a new stranger...');
       findNext();
+      return;
+    }
+
+    // 'disconnected' is usually a brief network hiccup that recovers on its
+    // own. Wait a grace period; only give up if it hasn't come back.
+    if (state === 'disconnected') {
+      if (dropTimer) return; // already waiting
+      dropTimer = setTimeout(() => {
+        dropTimer = null;
+        if (peerConn &&
+            (peerConn.connectionState === 'disconnected' ||
+             peerConn.connectionState === 'failed')) {
+          addSystemMsg('⚠️ Connection lost. Searching for a new stranger...');
+          findNext();
+        }
+      }, 8000); // 8s for the connection to recover before we give up
     }
   };
 }
 
 function cleanupPeer() {
+  if (dropTimer) { clearTimeout(dropTimer); dropTimer = null; }
   if (peerConn) {
     peerConn.close();
     peerConn = null;

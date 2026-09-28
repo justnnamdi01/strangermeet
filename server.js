@@ -31,6 +31,11 @@ const io = new Server(server, {
     methods: ['GET', 'POST'],
   },
   transports: ['websocket', 'polling'],
+  // During a call the media is peer-to-peer, so the signaling socket goes idle
+  // and only heartbeats keep it alive. Give brief network blips more room before
+  // the socket is considered dead (default pingTimeout is only 20s).
+  pingInterval: 25000,
+  pingTimeout: 60000,
 });
 
 app.use(cors());
