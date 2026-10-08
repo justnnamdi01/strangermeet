@@ -42,7 +42,9 @@ app.use(cors());
 app.use(express.json());
 
 // Serve the frontend from /public
-app.use(express.static(path.join(__dirname, 'public')));
+// `extensions: ['html']` lets /omegle-alternative serve omegle-alternative.html
+// (clean, SEO-friendly URLs without the .html).
+app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
 // ─── State ───────────────────────────────────────────────────────────
 const waitingQueue  = [];   // socket IDs waiting for a real match
