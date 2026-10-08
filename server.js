@@ -369,6 +369,54 @@ function saveSubscribers() {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// ─── Email sending (via Resend) ──────────────────────────────────────
+// Set these on Railway to turn emails on:
+//   RESEND_API_KEY  – your Resend API key (required to send anything)
+//   FROM_EMAIL      – sender, e.g. "StrangerMeet <hello@strangermeets.com>"
+//                     (must be a Resend-verified domain; defaults to Resend's
+//                      sandbox sender, which can only email YOUR own address)
+//   NOTIFY_EMAIL    – where owner signup alerts go (e.g. your inbox)
+const EMAIL_ENABLED = !!process.env.RESEND_API_KEY;
+const FROM_EMAIL    = process.env.FROM_EMAIL || 'StrangerMeet <onboarding@resend.dev>';
+const NOTIFY_EMAIL  = process.env.NOTIFY_EMAIL || '';
+
+async function sendEmail(to, subject, html) {
+  if (!EMAIL_ENABLED || !to) return;
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html }),
+    });
+    if (!r.ok) console.error('Email send failed:', r.status, await r.text().catch(() => ''));
+  } catch (e) {
+    console.error('Email error:', e.message);
+  }
+}
+
+function welcomeEmailHtml() {
+  return `
+    <div style="font-family:system-ui,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1a1a1a">
+      <h2 style="margin:0 0 8px">You're on the list 🎉</h2>
+      <p style="color:#555;line-height:1.6">
+        Thanks for signing up for early access to <strong>StrangerMeet</strong> —
+        meet random people from around the world, instantly.
+      </p>
+      <p style="color:#555;line-height:1.6">
+        We'll email you the moment we launch new features. No spam, promise.
+      </p>
+      <p style="margin-top:24px">
+        <a href="https://www.strangermeets.com" style="background:#7c3aed;color:#fff;
+          text-decoration:none;padding:12px 24px;border-radius:50px;font-weight:600">
+          Visit StrangerMeet</a>
+      </p>
+      <p style="color:#999;font-size:12px;margin-top:24px">You received this because you signed up at strangermeets.com. 18+ only.</p>
+    </div>`;
+}
+
 app.post('/api/subscribe', (req, res) => {
   const email = String((req.body && req.body.email) || '').trim().toLowerCase();
   if (!EMAIL_RE.test(email) || email.length > 254) {
@@ -379,6 +427,16 @@ app.post('/api/subscribe', (req, res) => {
     subscribers.push({ email, at: new Date().toISOString() });
     saveSubscribers();
     console.log(`📧 New signup: ${email} | Total: ${subscribers.length}`);
+
+    // Fire-and-forget emails (don't block the response)
+    sendEmail(email, "You're on the StrangerMeet early-access list 🎉", welcomeEmailHtml());
+    if (NOTIFY_EMAIL) {
+      sendEmail(
+        NOTIFY_EMAIL,
+        `New StrangerMeet signup (#${subscribers.length})`,
+        `<p>New early-access signup:</p><p><strong>${email}</strong></p><p>Total real signups: ${subscribers.length}</p>`
+      );
+    }
   }
   res.json({ ok: true, already: exists, count: subscribers.length + COUNT_BASE });
 });
@@ -503,7 +561,59 @@ app.get('/admin', (req, res) => {
         style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;
         padding:14px 32px;border-radius:50px;text-decoration:none;font-weight:700">
         Download email list (CSV)</a>
+
+      <div style="width:100%;max-width:520px;background:#18181c;border:1px solid #2e2e38;
+        border-radius:16px;padding:24px;margin-top:8px">
+        <h2 style="font-size:16px;margin:0 0 4px">📣 Email all subscribers</h2>
+        <p style="font-size:12px;color:#8888a0;margin:0 0 14px">
+          ${EMAIL_ENABLED
+            ? `Sends to all ${subscribers.length} real signup(s). Emails are off-limits to the 250 base count.`
+            : '⚠️ Email sending is OFF. Set RESEND_API_KEY on Railway to enable.'}
+        </p>
+        <form method="POST" action="/admin/broadcast" style="display:flex;flex-direction:column;gap:10px">
+          <input name="subject" placeholder="Subject" required
+            style="background:#222228;border:1px solid #2e2e38;border-radius:10px;padding:11px 14px;color:#f0f0f5;font-size:14px" />
+          <textarea name="message" placeholder="Your message to everyone..." rows="6" required
+            style="background:#222228;border:1px solid #2e2e38;border-radius:10px;padding:11px 14px;color:#f0f0f5;font-size:14px;font-family:inherit;resize:vertical"></textarea>
+          <button type="submit" ${EMAIL_ENABLED ? '' : 'disabled'}
+            style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;
+            padding:13px;border-radius:50px;font-weight:700;font-size:14px;cursor:pointer;opacity:${EMAIL_ENABLED ? '1' : '0.5'}">
+            Send to all subscribers</button>
+        </form>
+      </div>
     </body>`);
+});
+
+// Send a message to every real subscriber (admin only). Runs in the background
+// with a small gap between sends to respect Resend's rate limits.
+app.post('/admin/broadcast', express.urlencoded({ extended: true }), async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  if (!EMAIL_ENABLED) return res.status(400).send('Email sending is not configured (set RESEND_API_KEY).');
+
+  const subject = String((req.body && req.body.subject) || '').trim();
+  const message = String((req.body && req.body.message) || '').trim();
+  if (!subject || !message) return res.status(400).send('Subject and message are required.');
+
+  const html = `
+    <div style="font-family:system-ui,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1a1a1a">
+      ${message.split('\n').map((line) => `<p style="line-height:1.6;margin:0 0 12px">${line.replace(/</g, '&lt;')}</p>`).join('')}
+      <p style="margin-top:20px"><a href="https://www.strangermeets.com" style="background:#7c3aed;color:#fff;text-decoration:none;padding:12px 24px;border-radius:50px;font-weight:600">Visit StrangerMeet</a></p>
+      <p style="color:#999;font-size:12px;margin-top:24px">You received this because you joined the StrangerMeet early-access list. 18+ only.</p>
+    </div>`;
+
+  const recipients = subscribers.map((s) => s.email);
+  res.send(`<body style="font-family:system-ui;background:#0d0d0f;color:#f0f0f5;text-align:center;padding:60px">
+    <h2>📤 Sending to ${recipients.length} subscriber(s)…</h2>
+    <p style="color:#8888a0">You can close this page. <a href="/admin" style="color:#a855f7">Back to dashboard</a></p></body>`);
+
+  // Send sequentially in the background to stay under rate limits.
+  (async () => {
+    for (const to of recipients) {
+      await sendEmail(to, subject, html);
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    console.log(`📣 Broadcast "${subject}" sent to ${recipients.length} subscriber(s)`);
+  })();
 });
 
 app.get('/admin/emails.csv', (req, res) => {
@@ -523,6 +633,7 @@ app.get('/health', (req, res) => {
     pairs:      Object.keys(activePairs).length / 2,
     aiChats:    Object.keys(aiSessions).length,
     aiEnabled:  ai.AI_ENABLED,
+    emailEnabled: EMAIL_ENABLED,
     signups:    subscribers.length + COUNT_BASE,
     visitors:   visits.uniques,
     pageviews:  visits.pageviews,
@@ -534,5 +645,6 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`\n🚀 StrangerMeet server running on port ${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/health`);
-  console.log(`   fallback account: ${ai.AI_ENABLED ? '✅ enabled' : '⚠️  disabled'}\n`);
+  console.log(`   fallback account: ${ai.AI_ENABLED ? '✅ enabled' : '⚠️  disabled'}`);
+  console.log(`   email: ${EMAIL_ENABLED ? '✅ enabled' : '⚠️  disabled (set RESEND_API_KEY)'}\n`);
 });
